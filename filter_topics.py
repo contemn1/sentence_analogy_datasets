@@ -65,7 +65,7 @@ def sentences_verb_adj(sentence, parser):
     return ""
 
 
-def find_opposite_pairs(dict_path, sent_list, output_path):
+def create_opposite_dataset(dict_path, sent_list, output_path):
     pattern_should_filter = re.compile(r"makes? sure")
     with open(dict_path, mode="r") as json_file:
         opposite_dict = json.load(json_file)[": gram2-opposite"]
@@ -92,19 +92,13 @@ def find_opposite_pairs(dict_path, sent_list, output_path):
                 output_file.write(adj + "\t" + new_sent + "\t" + sent + "\n")
 
 
-if __name__ == '__main__':
-    mnli_path = "/home/zxj/Data/multinli_1.0"
-    input_path = os.path.join(mnli_path, "multinli_1.0_train_sents.txt")
-    sent_list = set(sent for sent_tuple in read_file(input_path, preprocess=lambda x: x.strip().split("\t")) for sent in
-                    sent_tuple)
-
-    nlp = spacy.load("en_core_web_sm")
+def create_comparative_dataset(sent_list, parser):
     bad_comparative = {"better", "more", "less", "worse"}
     for sentence in sent_list:
         if " than " not in sentence:
             continue
 
-        doc = nlp(sentence)
+        doc = parser(sentence)
         for token in doc:
             if token.text == "than" and token.dep_ == "prep" and token.head.tag_ == "JJR":
                 head_node = token.head
@@ -115,3 +109,53 @@ if __name__ == '__main__':
                 sent_index = head_node.idx if not modify_child else modify_child[0].idx
                 new_sentence = sentence[:sent_index] + head_node.lemma_ + "."
                 print(head_node.lemma_ + "\t" + head_node.text + "\t" + new_sentence + "\t" + sentence)
+
+
+def create_plural_dataset(sent_list, parser):
+    for sentence in sent_list:
+        doc = parser(sentence)
+        for token in doc:
+            if token.tag_ == "NNS" and token.dep_ == "dobj" and token.text[-1] == "s":
+                num_child = [child for child in token.children if child.dep_ == "nummod"]
+                if num_child:
+                    sub_children = [child for child in num_child[0].children if child.dep_ == "compound"]
+                    text_to_replace = num_child[0].text if not sub_children else sub_children[0].text + " " + num_child[
+                        0].text
+                    new_sentence = re.sub(token.text, token.lemma_, sentence)
+                    new_sentence = re.sub(text_to_replace, "one", new_sentence)
+                    print(token.text + "\t" + token.lemma_ + "\t" + new_sentence + "\t" + sentence)
+
+
+if __name__ == '__main__':
+    mnli_path = "/home/zxj/Data/multinli_1.0"
+    input_path = os.path.join(mnli_path, "multinli_1.0_train_sents.txt")
+    sent_list = set(sent for sent_tuple in read_file(input_path, preprocess=lambda x: x.strip().split("\t")) for sent in
+                    sent_tuple)
+
+    nlp = spacy.load("en_core_web_sm")
+    dict_path = os.path.join(mnli_path, "word-pairs-per-category.json")
+
+    plural_verb_dict = json.load(open(dict_path, encoding="utf-8"))[": gram9-plural-verbs"]
+    for sentence in sent_list:
+        doc = nlp(sentence)
+        for token in doc:
+            if token.dep_ == "nsubj" and token.head.dep_ == "ROOT" and token.tag_ == "NNP":
+                root_node = token.head
+                root_text = root_node.text
+                if root_node.tag_ == "VB" and root_text in plural_verb_dict:
+                    child_aux = [child for child in root_node.children if child.dep_ == "aux" ]
+                    if child_aux:
+                        child_negation = [child for child in root_node.children if child.dep_ == "neg"]
+                        if not child_negation:
+                            words_to_delete = child_aux[0].text
+                        elif child_negation[0].text == "not":
+                            words_to_delete = child_aux[0].text + " " + child_negation[0].text
+
+                        else:
+                            words_to_delete = child_aux[0].text + child_negation[0].text
+                        plural_verb = plural_verb_dict[root_text]
+                        new_sentence = re.sub(words_to_delete, "", sentence)
+                        new_sentence = re.sub(root_text, plural_verb, new_sentence)
+                        new_sentence = re.sub("\s+", " ", new_sentence)
+                        print(root_text + "\t" + plural_verb + "\t" + sentence + "\t" + new_sentence)
+                        break
