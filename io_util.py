@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-
-import configparser
+from __future__ import unicode_literals
 import logging
 import re
 import sys
-
+import io
 import numpy as np
 from gensim.models import KeyedVectors
 from nltk.tokenize import sent_tokenize
@@ -28,31 +27,6 @@ def get_word_dict(sentences, tokenize=True):
     return word_dict
 
 
-def get_glove(glove_path, word_dict):
-    # create word_vec with glove vectors
-    word_vec = {}
-    with open(glove_path, encoding="utf8") as f:
-        for line in f:
-            word, vec = line.split(' ', 1)
-            if word in word_dict:
-                word_vec[word] = np.fromstring(vec.strip(), sep=' ')
-
-    logging.info('Found {0}(/{1}) words with glove vectors'.format(
-        len(word_vec), len(word_dict)))
-
-    return word_vec
-
-
-def get_glove_dict(glove_path):
-    word_vec = {}
-    with open(glove_path, encoding="utf8") as f:
-        for line in f:
-            word, vec = line.split(' ', 1)
-            word_vec[word] = np.fromstring(vec.strip(), sep=' ')
-
-    return word_vec
-
-
 def load_numpy_arraies(file_path):
     return np.load(file_path)
 
@@ -73,20 +47,12 @@ def unfold_domain(text_list, keys=frozenset(["positive", "negative"])):
 
 def output_list_to_file(file_path, output_list, process=lambda x: x):
     try:
-        with open(file_path, mode="w+", encoding="utf-8") as file:
+        with io.open(file_path, mode="w+", encoding="utf-8") as file:
             for line in output_list:
                 file.write(process(line))
                 file.write("\n")
     except IOError as error:
         logging.error("Failed to open file {0}".format(error))
-
-
-def read_configs(config_path):
-    config = configparser.ConfigParser()
-    config.optionxform = str
-    config.read(config_path, encoding="utf-8")
-    config_dict = {key: string_to_attributes(value) for key, value in config["arguments"].items()}
-    return config_dict
 
 
 def load_pretrained_word2vec(model_path, binary=True):
@@ -108,7 +74,7 @@ def string_to_attributes(input_string):
 def read_text_file_with_think(input_path):
     sentecnes = []
     try:
-        with open(input_path, encoding="utf-8") as f:
+        with io.open(input_path, encoding="utf-8") as f:
             for line in f:
                 results = sent_tokenize(line)
                 sents = [ele1 for ele1 in results if THINKREGEX.search(ele1)]
@@ -124,7 +90,7 @@ def read_text_file_with_think(input_path):
 
 def read_file(file_path, encoding="utf-8", preprocess=lambda x: x):
     try:
-        with open(file_path, encoding=encoding) as file:
+        with io.open(file_path, encoding=encoding) as file:
             for sentence in file.readlines():
                 yield (preprocess(sentence))
 
