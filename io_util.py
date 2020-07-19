@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
+
+import io
 import logging
 import re
 import sys
-import io
+
 import numpy as np
 from gensim.models import KeyedVectors
 from nltk.tokenize import sent_tokenize
@@ -107,4 +109,5 @@ if __name__ == '__main__':
         if len(ele) == 3:
             result_list.append([ele[1], ele[0], ele[-1]])
 
-    output_list_to_file("/home/zxj/Downloads/new_corpus/new_argument_compositionality.txt", result_list, process=lambda x: "\t".join(x))
+    output_list_to_file("/home/zxj/Downloads/new_corpus/new_argument_compositionality.txt", result_list,
+                        process=lambda x: "\t".join(x))

@@ -1,7 +1,7 @@
 import json
 import os
 import string
-
+import spacy
 from io_util import read_file, output_list_to_file
 
 
@@ -14,8 +14,7 @@ def read_template_dict(template_name, category_name):
     return templates, pair_dict
 
 
-def generate_capital_countries(template_name, category_name):
-    templates, country_dict = read_template_dict(template_name, category_name)
+def generate_capital_countries(templates, country_dict):
     result_list = []
     for tem in templates:
         for country, city in country_dict.items():
@@ -25,93 +24,98 @@ def generate_capital_countries(template_name, category_name):
     return result_list
 
 
-def generate_currency(root_dir, template_name, category_name):
-    templates, currency_dict = read_template_dict(template_name, category_name)
-    templates = [temp.split("\t") for temp in templates]
-    quadruple_path = os.path.join(root_dir, "currency_word_pairs.txt")
-    currency_country_quads = list(
-        read_file(quadruple_path, preprocess=lambda x: x.strip().split(" ")))
-    one_parameter_templates = templates[:4]
-    two_parameter_templates = templates[5:]
-    result_list = []
-    for idx, template_arr in enumerate(one_parameter_templates):
-        currency_template, country_template = template_arr
+def generate_currency(templates, currency_dict):
+    for idx, temp in enumerate(templates):
+        currency_template, country_template = temp.split("\t")  # type: str
         for country, currency in currency_dict.items():
-            currency = string.capwords(currency) if idx == 0 else currency
-            currency_sent = currency_template.format(currency) if idx < 2 else currency_template.format(currency,
-                                                                                                        country)
-            country_sent = country_template.format(country)
-            output_list = [country, currency, country_sent, currency_sent]
-            result_list.append("\t".join(output_list))
-
-    for idx, template_arr in enumerate(two_parameter_templates):
-        currency_template, country_template = template_arr
-        for arr in currency_country_quads:
-            country1, currency1, country2, currency2 = arr
-            currency1 = string.capwords(currency1) if idx == 0 else currency1
-            country_sent = country_template.format(country1, country2)
-            currency_sent = currency_template.format(currency1, currency2)
-            output_list = [country1, currency1, currency2, currency2, country_sent, currency_sent]
-            result_list.append("\t".join(output_list))
-
-    return result_list
+            output_list = [country, currency, country_template.format(country),
+                           currency_template.format(currency).capitalize()]
+            yield "\t".join(output_list)
 
 
-def generate_city_in_state(template_name, category_name):
-    templates, city_dict = read_template_dict(template_name, category_name)
-    result_list = []
+def generate_city_in_state(templates, city_dict):
     for idx, temp in enumerate(templates):
         for city, state in city_dict.items():
-            city = string.capwords(city)
-            state = string.capwords(state)
             if idx >= 4:
                 city_template, state_template = temp.split("\t")
             else:
-                city_template = temp
-                state_template = temp
+                city_template, state_template = temp, temp
 
             output_list = [city, state, city_template.format(city), state_template.format(state)]
-            result_list.append("\t".format(output_list))
-
-    return result_list
+            yield "\t".join(output_list)
 
 
-def generate_family(template_name, category_name):
-    special_key_list = {"boy", "king", "groom", "prince", "husband", "man"}
-    templates, family_dict = read_template_dict(template_name, category_name)
+def generate_family(templates, family_dict):
+    special_key_list = {"boy", "king", "groom", "prince", "man", "policeman"}
     templates = [temp.split("\t") for temp in templates]
-    result_list = []
+    output_list = []
     for idx, temp in enumerate(templates):
         for key, value in family_dict.items():
-            if idx >= 4:
+            if idx >= 5:
                 male_template, female_template = temp
-                result_list.append(male_template.format(
-                    key) + "\t" + female_template.format(value))
+                male_sent = male_template.format(key)
+                female_sent = female_template.format(value)
+                if key not in special_key_list:
+                    male_sent = "My" + male_sent[3:]
+                    female_sent = "My" + female_sent[3:]
+
+                result_list = [key, value, male_sent, female_sent]
+                output_list.append("\t".join(result_list))
             else:
                 template = temp[1] if key in special_key_list else temp[0]
-                result_list.append(template.format(
-                    key) + "\t" + template.format(value))
-    return result_list
+                result_list = [key, value, template.format(key), template.format(value)]
+                output_list.append("\t".join(result_list))
+    return output_list
 
 
-def generate_nationality_adj(template_name, category_name):
-    templates, family_dict = read_template_dict(template_name, category_name)
+def generate_nationality_adj(templates, nation_dict):
     templates = [temp.split("\t") for temp in templates]
-    result_list = []
+    output_list = []
     for idx, arr in enumerate(templates):
         adj_template, nation_template = arr
-        for nation, nation_adj in family_dict.items():
+        for nation, nation_adj in nation_dict.items():
             nation = string.capwords(nation)
             nation_adj = string.capwords(nation_adj)
-            result_list.append(nation_template.format(
-                nation) + "\t" + adj_template.format(nation_adj))
+            result_list = [nation, nation_adj, nation_template.format(nation), adj_template.format(nation_adj)]
+            output_list.append("\t".join(result_list))
 
-    return result_list
+    return output_list
 
 
-if __name__ == "__main__":
-    template_name = "capital_world_templates.txt"
-    category_name = "capital-world"
-    result_list = generate_capital_countries(template_name, category_name)
-    output_path = "/home/zxj/Data/sentence_analogy_datasets/capital_world_pairs.txt"
-    output_list_to_file(output_path, result_list)
+def generate_datasets(root_dir, category_name, generation_algorithm):
+    templates_dir = os.path.join(root_dir, "templates")
+    dict_dir = os.path.join(root_dir, "dict")
+    template_path = os.path.join(templates_dir, "{0}_templates.txt".format(category_name))
+    dict_path = os.path.join(dict_dir, "{0}_words.txt".format(category_name))
+    word_dict = {key: value for key, value in read_file(dict_path, preprocess=lambda x: x.strip().split("\t"))}
+    templates = list(read_file(template_path, preprocess=lambda x: x.strip()))
+    return generation_algorithm(templates, word_dict)
+
+
+def extract_dict(file_path):
+    """
+    :type file_path: str
+    :param file_path: path of input file
+    :return: Dict[str, str]
+    """
+    file_iter = read_file(file_path, preprocess=lambda x: x.strip().split("\t")[:2])
+    return {key.lower(): value.lower() for key, value in file_iter}
+
+
+def negate_sentence(original_sentence, parser):
+    doc = parser(original_sentence)
+    for token in doc:
+        if token.dep_ == "nsubj":
+            head_word = token.head
+            if head_word.tag_ == "VBZ":
+                negation_word = "does not {0}".format(head_word.lemma_)
+            elif head_word.tag_ == "VBP":
+                negation_word = "do not {0}".format(head_word.lemma_)
+            elif head_word.tag_ == "VBD":
+                negation_word = "did not {0}".format(head_word.lemma_)
+            else:
+                negation_word = "not {0}".format(head_word.text)
+            head_position = head_word.idx
+            return original_sentence[:head_position] + negation_word + original_sentence[head_position + len(head_word.text):]
+
+    return ""
